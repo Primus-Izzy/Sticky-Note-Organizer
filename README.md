@@ -2,11 +2,12 @@
 
 <div align="center">
 
-![Python](https://img.shields.io/badge/python-3.7+-blue.svg)
-![License](https://img.shields.io/badge/license-MIT-green.svg)
-![Platform](https://img.shields.io/badge/platform-Windows-blue.svg)
-![Tests](https://img.shields.io/badge/tests-passing-brightgreen.svg)
-![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)
+[![PyPI version](https://img.shields.io/pypi/v/sticky-note-organizer)](https://pypi.org/project/sticky-note-organizer/)
+[![PyPI downloads](https://img.shields.io/pypi/dm/sticky-note-organizer)](https://pypi.org/project/sticky-note-organizer/)
+[![Python](https://img.shields.io/pypi/pyversions/sticky-note-organizer)](https://pypi.org/project/sticky-note-organizer/)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Windows-blue.svg)](https://github.com/Primus-Izzy/Sticky-Note-Organizer)
+[![Tests](https://img.shields.io/badge/tests-passing-brightgreen.svg)](https://github.com/Primus-Izzy/Sticky-Note-Organizer/actions)
 
 **A powerful Windows application to extract, organize, and analyze Microsoft Sticky Notes with both CLI and GUI interfaces.**
 
@@ -72,7 +73,15 @@ Perfect for:
 
 ### Installation
 
-**Option 1: Quick Install (Recommended)**
+**Option 1: Install from PyPI (Easiest)** ⭐
+
+```bash
+pip install sticky-note-organizer
+```
+
+That's it! The package and all dependencies will be installed automatically.
+
+**Option 2: Install from Source**
 
 1. **Clone the repository:**
    ```bash
@@ -89,13 +98,6 @@ Perfect for:
    ```bash
    sticky-organizer --help
    ```
-
-**Option 2: Manual Install**
-
-```bash
-pip install -r requirements.txt
-pip install -e .
-```
 
 ### 🎮 Launch the GUI (Super Easy!)
 
