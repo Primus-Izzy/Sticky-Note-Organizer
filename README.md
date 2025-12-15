@@ -364,8 +364,8 @@ categorized = categorizer.categorize_notes(notes)
 
 ### Supported Formats
 
-- **Modern Sticky Notes** (Windows 10/11): `plum.sqlite`
-- **Classic Sticky Notes** (Windows 7/8/early 10): `StickyNotes.snt` *(coming soon)*
+- **Modern Sticky Notes** (Windows 10/11): `plum.sqlite` ✅
+- **Classic Sticky Notes** (Windows 7/8/early 10): `StickyNotes.snt` ✅ **NEW in v1.1.0!**
 
 ### Auto-Detection Locations
 
@@ -552,12 +552,13 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🗺️ Roadmap
 
-- [ ] Support for Classic Sticky Notes (.snt format)
+- [x] Support for Classic Sticky Notes (.snt format) ✅ **v1.1.0**
 - [ ] Cloud sync support
 - [ ] Mobile app companion
 - [ ] Advanced AI-powered categorization
 - [ ] Collaborative features
 - [ ] Theme customization
+- [ ] Export to OneNote/Evernote
 
 ---
 

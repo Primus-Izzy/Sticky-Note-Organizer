@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2024-12-15
+
+### Added
+
+#### Classic Sticky Notes Support
+- **Full support for .snt file format** (Windows 7/8/early 10)
+  - New `ClassicStickyNotesParser` class for parsing .snt files
+  - Extracts text content from RTF-formatted classic sticky notes
+  - Supports multiple encoding methods (UTF-8, UTF-16, Latin-1)
+  - Automatic detection and handling of classic .snt format
+- **Updated database auto-detection** to find .snt files
+  - Searches standard Windows 7/8 locations
+  - Supports both `StickyNotes.snt` and `ThresholdNotes.snt`
+- **Seamless integration** with existing tools
+  - Works with all CLI commands
+  - Works with GUI interface
+  - Same export formats available
+  - Same categorization system applies
+
+### Changed
+- Enhanced `StickyNotesDatabase.connect()` to handle .snt files
+- Enhanced `StickyNotesDatabase.extract_notes()` to parse .snt format
+- Updated documentation to reflect .snt support
+
+### Technical Details
+- **Binary format parsing** for proprietary .snt structure
+- **RTF content extraction** with multiple fallback methods
+- **Robust error handling** for corrupted or unusual .snt files
+- **Backward compatible** - existing functionality unchanged
+
+---
+
 ## [1.0.0] - 2024-12-15
 
 ### Added

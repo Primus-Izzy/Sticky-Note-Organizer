@@ -5,9 +5,135 @@ Database detection and handling for Microsoft Sticky Notes
 import os
 import sqlite3
 import platform
+import struct
+import re
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 from datetime import datetime
+
+
+class ClassicStickyNotesParser:
+    """Parser for classic Sticky Notes .snt format (Windows 7/8)"""
+
+    @staticmethod
+    def extract_notes_from_snt(file_path: str) -> List[Dict[str, Any]]:
+        """
+        Extract notes from classic .snt file format.
+        The .snt file is an OLE compound document containing RTF data.
+        """
+        notes = []
+
+        try:
+            with open(file_path, 'rb') as f:
+                content = f.read()
+
+            # Look for RTF content markers and note separators
+            # Classic sticky notes store data in RTF format
+            rtf_pattern = rb'\\rtf1[^}]*?\\(uc1)?\\pard[^}]*?([^\\]+?)(?=\\rtf1|$)'
+
+            # Try to find text content between RTF tags
+            text_patterns = [
+                rb'\\pard[^}]*?([^\\\r\n]{10,})',  # Paragraph text
+                rb'\\f0\\fs\d+\s+([^\\\r\n]{5,})',  # Formatted text
+                rb'([A-Za-z0-9][^\\\r\n]{20,})',     # Plain text blocks
+            ]
+
+            note_id = 1
+            found_texts = set()  # Avoid duplicates
+
+            # Method 1: Look for readable text sequences
+            for match in re.finditer(rb'[\x20-\x7E\s]{30,}', content):
+                text_bytes = match.group(0)
+                try:
+                    text = text_bytes.decode('utf-8', errors='ignore').strip()
+                    # Clean RTF tags
+                    text = re.sub(r'\\[a-z]+\d*\s*', '', text)
+                    text = re.sub(r'[{}\\]', '', text)
+                    text = re.sub(r'\s+', ' ', text).strip()
+
+                    # Filter out too short or RTF metadata
+                    if (len(text) > 20 and
+                        text not in found_texts and
+                        not text.startswith(('rtf', 'fonttbl', 'colortbl', 'Microsoft')) and
+                        any(c.isalpha() for c in text)):
+
+                        found_texts.add(text)
+                        notes.append({
+                            'id': f'classic_{note_id}',
+                            'content': text,
+                            'created_date': 'Unknown',
+                            'updated_date': 'Unknown',
+                            'theme': 'Classic',
+                            'type': 'ClassicNote'
+                        })
+                        note_id += 1
+                except:
+                    continue
+
+            # Method 2: Try Unicode (UTF-16) extraction
+            for match in re.finditer(rb'(?:[\x20-\x7E]\x00){20,}', content):
+                text_bytes = match.group(0)
+                try:
+                    text = text_bytes.decode('utf-16-le', errors='ignore').strip()
+                    text = re.sub(r'[^\x20-\x7E\s]', '', text)
+                    text = re.sub(r'\s+', ' ', text).strip()
+
+                    if (len(text) > 20 and
+                        text not in found_texts and
+                        any(c.isalpha() for c in text)):
+
+                        found_texts.add(text)
+                        notes.append({
+                            'id': f'classic_{note_id}',
+                            'content': text,
+                            'created_date': 'Unknown',
+                            'updated_date': 'Unknown',
+                            'theme': 'Classic',
+                            'type': 'ClassicNote'
+                        })
+                        note_id += 1
+                except:
+                    continue
+
+            # If no notes found, try simpler extraction
+            if not notes:
+                # Look for any substantial text content
+                text_content = content.decode('latin-1', errors='ignore')
+                # Remove RTF codes
+                text_content = re.sub(r'\\[a-z]+\d*\s*', '', text_content)
+                text_content = re.sub(r'[{}]', '\n', text_content)
+
+                lines = [line.strip() for line in text_content.split('\n') if line.strip()]
+                for line in lines:
+                    if (len(line) > 20 and
+                        line not in found_texts and
+                        not line.startswith(('rtf', 'fonttbl')) and
+                        sum(c.isalpha() for c in line) > 10):
+
+                        found_texts.add(line)
+                        notes.append({
+                            'id': f'classic_{note_id}',
+                            'content': line,
+                            'created_date': 'Unknown',
+                            'updated_date': 'Unknown',
+                            'theme': 'Classic',
+                            'type': 'ClassicNote'
+                        })
+                        note_id += 1
+
+        except Exception as e:
+            print(f"Error parsing .snt file: {e}")
+            # Return a helpful message
+            notes.append({
+                'id': 'error_1',
+                'content': f'Could not parse classic .snt file. Error: {str(e)}. This format may require manual conversion.',
+                'created_date': 'Unknown',
+                'updated_date': 'Unknown',
+                'theme': 'Error',
+                'type': 'ErrorNote'
+            })
+
+        return notes
 
 
 class StickyNotesDatabase:
@@ -69,16 +195,27 @@ class StickyNotesDatabase:
             self.db_path = db_path
         else:
             self.db_path = self.find_database()
-            
+
         if not self.db_path:
             return False
-            
-        try:
-            self.connection = sqlite3.connect(self.db_path)
-            return True
-        except sqlite3.Error as e:
-            print(f"Error connecting to database: {e}")
-            return False
+
+        # Check if it's an .snt file (classic format)
+        if self.db_path.endswith('.snt'):
+            # For .snt files, we don't need a SQL connection
+            # Just verify the file exists
+            if os.path.exists(self.db_path):
+                return True
+            else:
+                print(f"File not found: {self.db_path}")
+                return False
+        else:
+            # For SQLite databases
+            try:
+                self.connection = sqlite3.connect(self.db_path)
+                return True
+            except sqlite3.Error as e:
+                print(f"Error connecting to database: {e}")
+                return False
     
     def get_table_info(self) -> Dict[str, List[str]]:
         """Get information about available tables and columns"""
@@ -106,12 +243,18 @@ class StickyNotesDatabase:
     
     def extract_notes(self) -> List[Dict[str, Any]]:
         """Extract all notes from the database"""
+        # Check if it's a classic .snt file
+        if self.db_path and self.db_path.endswith('.snt'):
+            print(f"Parsing classic Sticky Notes file: {self.db_path}")
+            return ClassicStickyNotesParser.extract_notes_from_snt(self.db_path)
+
+        # For SQLite databases
         if not self.connection:
             return []
-            
+
         cursor = self.connection.cursor()
         notes = []
-        
+
         try:
             # Check if Note table exists (modern format)
             tables = self.get_table_info()
@@ -162,9 +305,7 @@ class StickyNotesDatabase:
                             'type': note_type or 'Note'
                         })
             
-            # TODO: Add support for classic Sticky Notes format
-            # elif other_classic_table_exists:
-            #     handle_classic_format()
+            # Note: Classic .snt format is handled separately above
                         
         except sqlite3.Error as e:
             print(f"Error extracting notes: {e}")
@@ -176,3 +317,5 @@ class StickyNotesDatabase:
         if self.connection:
             self.connection.close()
             self.connection = None
+        # For .snt files, no connection to close
+        self.db_path = None
