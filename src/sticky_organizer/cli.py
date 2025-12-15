@@ -87,7 +87,7 @@ def print_stats(categorized_notes, total_notes):
 
 
 @click.group()
-@click.version_option(version="1.0.0")
+@click.version_option(version="1.1.0")
 def cli():
     """
     Sticky Note Organizer
