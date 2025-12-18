@@ -73,7 +73,17 @@ Perfect for:
 
 ### Installation
 
-**Option 1: Install from PyPI (Easiest)** ⭐
+**Option 1: Windows Standalone Executable (No Python Required)** 🪟
+
+Perfect for non-technical Windows users:
+
+1. Download `StickyNoteOrganizer-GUI.exe` from the [latest release](https://github.com/Primus-Izzy/Sticky-Note-Organizer/releases)
+2. Double-click to run - no installation needed!
+3. File size: 7 MB
+
+See [WINDOWS_EXECUTABLE_GUIDE.md](WINDOWS_EXECUTABLE_GUIDE.md) for details.
+
+**Option 2: Install from PyPI (Recommended for Python Users)** ⭐
 
 ```bash
 pip install sticky-note-organizer
@@ -81,7 +91,7 @@ pip install sticky-note-organizer
 
 That's it! The package and all dependencies will be installed automatically.
 
-**Option 2: Install from Source**
+**Option 3: Install from Source**
 
 1. **Clone the repository:**
    ```bash
