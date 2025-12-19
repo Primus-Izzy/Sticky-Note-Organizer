@@ -16,7 +16,7 @@ except UnicodeDecodeError:
 
 setup(
     name="sticky-note-organizer",
-    version="1.1.0",
+    version="1.1.1",
     author="Primus-Izzy",
     author_email="",
     description="A powerful CLI and GUI tool to extract, organize, and analyze Microsoft Sticky Notes (modern and classic formats)",

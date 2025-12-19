@@ -1,8 +1,8 @@
-# 🎉 Sticky Note Organizer v1.1.0
+# 🎉 Sticky Note Organizer v1.1.1
 
 ## Classic Sticky Notes Support
 
-We're excited to announce v1.1.0 with full support for **Classic Sticky Notes (.snt format)** from Windows 7/8/early Windows 10!
+We're excited to announce v1.1.1 with full support for **Classic Sticky Notes (.snt format)** from Windows 7/8/early Windows 10!
 
 ---
 
@@ -190,9 +190,9 @@ All your settings and workflows remain unchanged!
 
 ---
 
-**Full Changelog**: [v1.0.0...v1.1.0](https://github.com/Primus-Izzy/Sticky-Note-Organizer/compare/v1.0.0...v1.1.0)
+**Full Changelog**: [v1.0.0...v1.1.1](https://github.com/Primus-Izzy/Sticky-Note-Organizer/compare/v1.0.0...v1.1.1)
 
-**Download**: [Source code (zip)](https://github.com/Primus-Izzy/Sticky-Note-Organizer/archive/refs/tags/v1.1.0.zip) | [Source code (tar.gz)](https://github.com/Primus-Izzy/Sticky-Note-Organizer/archive/refs/tags/v1.1.0.tar.gz)
+**Download**: [Source code (zip)](https://github.com/Primus-Izzy/Sticky-Note-Organizer/archive/refs/tags/v1.1.1.zip) | [Source code (tar.gz)](https://github.com/Primus-Izzy/Sticky-Note-Organizer/archive/refs/tags/v1.1.1.tar.gz)
 
 ---
 

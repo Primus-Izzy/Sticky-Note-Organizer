@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2024-12-19
+
+### Added
+
+#### Windows Standalone Executable
+- **StickyNoteOrganizer-GUI.exe** - Standalone Windows executable (7 MB)
+  - No Python installation required
+  - Complete GUI functionality bundled
+  - Built with PyInstaller 6.17.0
+  - Perfect for non-technical Windows users
+- **cli_launcher.py** - Proper entry point for CLI executable
+- **WINDOWS_EXECUTABLE_GUIDE.md** - Comprehensive guide for standalone executables
+- **GITHUB_RELEASE_INSTRUCTIONS.md** - Step-by-step release creation guide
+
+### Changed
+- Updated README.md with Windows executable installation option
+- Updated installation instructions to prioritize different user types
+- Enhanced documentation for distribution options
+
+### Fixed
+- Version display in CLI now correctly shows package version
+- Improved package metadata and entry points
+
+---
+
 ## [1.1.0] - 2024-12-15
 
 ### Added
