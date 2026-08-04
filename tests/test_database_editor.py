@@ -6,6 +6,7 @@ synthetic plum.sqlite-style database using the real schema and real
 
 import sqlite3
 from datetime import datetime
+from pathlib import Path
 
 import pytest
 
@@ -212,3 +213,24 @@ class TestEditor:
 
         backups = list(backup_dir.glob('*.zip'))
         assert len(backups) == 1
+
+
+class TestBackupRestore:
+    def test_restore_to_different_name_preserves_original(self, plum_db, tmp_path):
+        """Restoring a zip backup to a new filename must not delete or
+        clobber the file that still has the archived name (regression:
+        restore used to extract into the target directory directly)."""
+        from sticky_organizer.backup import BackupManager
+
+        mgr = BackupManager(str(tmp_path / 'bk'))
+        backup_file = mgr.create_backup(plum_db)
+
+        target = Path(plum_db).parent / 'restored_copy.sqlite'
+        assert mgr.restore_backup(backup_file, str(target),
+                                  create_backup_first=False)
+
+        # Original still exists, restored copy is byte-identical
+        original = Path(plum_db)
+        assert original.exists()
+        assert target.exists()
+        assert target.read_bytes() == original.read_bytes()

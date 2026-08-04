@@ -28,6 +28,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instead of dropping them.
 - CLI startup no longer imports pandas eagerly (multi-second delay on some
   systems); Excel support is detected without importing it.
+- **Restoring a backup to a custom filename no longer deletes the file that
+  has the archived name** in the target directory (the zip was extracted
+  directly into the target directory; it now goes through a temp dir).
 
 ### Changed
 - **Deletes are soft by default** (set `DeletedAt`, recoverable) in both CLI

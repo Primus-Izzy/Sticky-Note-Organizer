@@ -4,6 +4,7 @@ Backup and restore functionality for sticky notes database
 
 import os
 import shutil
+import tempfile
 import zipfile
 from pathlib import Path
 from datetime import datetime
@@ -105,13 +106,12 @@ class BackupManager:
                 if not db_files:
                     raise ValueError("No database file found in backup archive")
 
-                # Extract the first database file
-                zipf.extract(db_files[0], target_path.parent)
-
-                # Rename to target path if necessary
-                extracted_path = target_path.parent / db_files[0]
-                if extracted_path != target_path:
-                    shutil.move(str(extracted_path), str(target_path))
+                # Extract to a temp dir first: extracting straight into the
+                # target directory would clobber any existing file that has
+                # the archived name (e.g. the live plum.sqlite).
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    extracted_path = zipf.extract(db_files[0], tmpdir)
+                    shutil.move(extracted_path, str(target_path))
         else:
             shutil.copy2(backup_path, target_path)
 
