@@ -48,6 +48,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Library modules use `logging` instead of `print`.
 - `--version` now reports the real package version (was hardcoded).
 
+### Improved
+- **Smarter categorization**: keywords now match whole words with light
+  suffix stemming ("business" matches "businesses") instead of raw
+  substrings ("do" no longer matches "download"). Phrases score double,
+  and strong signals (currency amounts, URLs, code) boost their category
+  instead of overriding everything. Phone numbers and emails still route
+  straight to Contacts.
+- **GUI usability overhaul for non-technical users**: clear "found your
+  notes automatically" status, welcome guidance when no database is found,
+  note list shows dates, friendly empty states and plain-language dialogs,
+  exports go to Documents/Sticky Notes Exports with an "open folder"
+  prompt, backups live in a fixed per-user folder, and larger readable
+  fonts.
+- **Backup Restore and Delete buttons now actually work** (they were
+  unimplemented stubs showing "implementation in progress").
+
+### Fixed (GUI)
+- Clicking a search result opened the wrong note (selection indexed into
+  the unfiltered list).
+- About dialog showed a stale version number.
+
 ### Added
 - GitHub Actions CI (tests on Windows and Ubuntu, Python 3.9-3.13; build +
   `twine check`) and a PyPI Trusted Publishing release workflow.

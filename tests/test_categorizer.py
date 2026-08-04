@@ -101,3 +101,45 @@ class TestNoteCategorizer:
         
         # Should handle gracefully without errors
         assert len(categorized) >= 0
+
+class TestCategorizerPrecision:
+    """Regression tests: keywords must match whole words, not substrings"""
+
+    def setup_method(self):
+        self.categorizer = NoteCategorizer()
+
+    def test_no_substring_false_positives(self):
+        # 'download' must not trigger Tasks via 'do'; 'buyer' must not
+        # trigger Shopping via 'buy'
+        assert self.categorizer.categorize_note(
+            "The sunset was beautiful over the horizon") == 'Miscellaneous'
+
+    def test_plural_and_suffix_matching(self):
+        assert self.categorizer.categorize_note(
+            "New ideas for improving our businesses") == 'Business Ideas'
+
+    def test_currency_boosts_not_overrides(self):
+        # Business-heavy note with money mentioned stays a business note
+        content = ("Startup pitch: our product targets enterprise customers, "
+                   "revenue model is subscriptions, raise $2M seed funding")
+        assert self.categorizer.categorize_note(content) == 'Business Ideas'
+
+    def test_currency_alone_is_financial(self):
+        assert self.categorizer.categorize_note(
+            "Owe Tunde $250 for the generator") == 'Financial/Money'
+
+    def test_phone_number_is_contact(self):
+        assert self.categorizer.categorize_note(
+            "Mum new line 0803 555 1234") == 'Contacts/People'
+
+    def test_code_snippet_is_tech(self):
+        assert self.categorizer.categorize_note(
+            "def process(x):\n    return x * 2") == 'Technology/Development'
+
+    def test_shopping_list(self):
+        assert self.categorizer.categorize_note(
+            "Shopping list: rice, beans, tomatoes") == 'Shopping/Items'
+
+    def test_task_reminder(self):
+        assert self.categorizer.categorize_note(
+            "Reminder: call the plumber tomorrow, urgent") == 'Tasks/Reminders'

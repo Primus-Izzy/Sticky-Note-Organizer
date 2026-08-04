@@ -18,6 +18,7 @@ try:
 except ImportError:
     MATPLOTLIB_AVAILABLE = False
 
+from . import __version__
 from .database import StickyNotesDatabase
 from .categorizer import NoteCategorizer
 from .exporters import ExportManager
@@ -26,6 +27,12 @@ from .backup import BackupManager
 from .analytics import AdvancedAnalytics
 from .editor import NoteEditor
 
+# One predictable place for user files, independent of where the app
+# was launched from.
+APP_DIR = Path.home() / '.sticky_note_organizer'
+BACKUP_DIR = APP_DIR / 'backups'
+EXPORT_DIR = Path.home() / 'Documents' / 'Sticky Notes Exports'
+
 
 class StickyNoteGUI(tk.Tk):
     """Main GUI application for Sticky Note Organizer"""
@@ -33,8 +40,13 @@ class StickyNoteGUI(tk.Tk):
     def __init__(self):
         super().__init__()
 
-        self.title("Sticky Note Organizer")
+        self.title(f"Sticky Note Organizer {__version__}")
         self.geometry("1200x700")
+
+        # Readable defaults for non-technical users
+        self.option_add('*Font', ('Segoe UI', 10))
+        style = ttk.Style(self)
+        style.configure('.', font=('Segoe UI', 10))
 
         # Data storage
         self.db_path = None
@@ -42,6 +54,7 @@ class StickyNoteGUI(tk.Tk):
         self.categorized_notes = {}
         self.filtered_notes = []
         self.selected_note = None
+        self._backups = []
 
         # Initialize components
         self.db = StickyNotesDatabase()
@@ -51,6 +64,7 @@ class StickyNoteGUI(tk.Tk):
         # Setup UI
         self.create_widgets()
         self.auto_connect_database()
+        self.refresh_backups()
 
     def create_widgets(self):
         """Create all GUI widgets"""
@@ -106,9 +120,9 @@ class StickyNoteGUI(tk.Tk):
         conn_frame = ttk.Frame(self)
         conn_frame.pack(fill=tk.X, padx=5, pady=5)
 
-        ttk.Label(conn_frame, text="Database:").pack(side=tk.LEFT, padx=5)
+        ttk.Label(conn_frame, text="Your notes:").pack(side=tk.LEFT, padx=5)
 
-        self.db_path_var = tk.StringVar(value="Not connected")
+        self.db_path_var = tk.StringVar(value="Looking for your Sticky Notes...")
         ttk.Label(conn_frame, textvariable=self.db_path_var, relief=tk.SUNKEN, anchor=tk.W).pack(
             side=tk.LEFT, fill=tk.X, expand=True, padx=5
         )
@@ -352,13 +366,21 @@ class StickyNoteGUI(tk.Tk):
 
     # Database operations
     def auto_connect_database(self):
-        """Automatically connect to database"""
+        """Automatically find and connect to the Sticky Notes database"""
         if self.db.connect():
             self.db_path = self.db.db_path
-            self.db_path_var.set(self.db_path)
+            self.db_path_var.set(f"✓ Found automatically — {self.db_path}")
             self.load_notes()
         else:
-            self.status_var.set("No database found - please connect manually")
+            self.db_path_var.set("Could not find your Sticky Notes automatically")
+            self.status_var.set("No notes found yet")
+            messagebox.showinfo(
+                "Welcome!",
+                "I couldn't find your Microsoft Sticky Notes automatically.\n\n"
+                "If you've used the Sticky Notes app on this computer, "
+                "click the 'Connect' button and I'll help you locate them.\n\n"
+                "If you've never used Sticky Notes, open the app from the "
+                "Start menu and write a note first.")
 
     def open_database(self):
         """Open database file dialog"""
@@ -390,7 +412,22 @@ class StickyNoteGUI(tk.Tk):
             self.update_category_list()
             self.update_filter_categories()
             self.note_count_var.set(f"{len(self.notes)} notes")
-            self.status_var.set(f"Loaded {len(self.notes)} notes")
+            self.status_var.set(
+                f"Loaded {len(self.notes)} notes, organized into "
+                f"{len(self.categorized_notes)} categories — "
+                "pick a category on the left to browse")
+
+            # Friendly empty state in the editor pane
+            if not self.selected_note:
+                self.note_text.delete('1.0', tk.END)
+                self.note_text.insert(
+                    '1.0',
+                    "Welcome!\n\n"
+                    "1. Pick a category in the left panel\n"
+                    "2. Click a note in the middle list\n"
+                    "3. Read or edit it right here\n\n"
+                    "Tip: use the search box above the list to find "
+                    "anything instantly.")
 
             # Update database info
             self.update_db_info()
@@ -432,10 +469,17 @@ class StickyNoteGUI(tk.Tk):
         self.notes_listbox.delete(0, tk.END)
 
         for note in notes_to_show:
-            preview = note['content'][:50].replace('\n', ' ')
-            self.notes_listbox.insert(tk.END, preview)
+            self.notes_listbox.insert(tk.END, self._note_preview(note))
 
+        self._category_notes = notes_to_show
         self.filtered_notes = notes_to_show
+
+    @staticmethod
+    def _note_preview(note):
+        """One-line list entry: date + start of the note"""
+        date = (note.get('created_date') or '')[:10]
+        preview = note['content'][:60].replace('\n', ' ')
+        return f"{date}  ·  {preview}" if date and date != 'Unknown' else preview
 
     def on_note_select(self, event):
         """Handle note selection"""
@@ -459,14 +503,17 @@ class StickyNoteGUI(tk.Tk):
             self.on_category_select(None)
             return
 
-        # Filter notes by search term
-        matching_notes = [n for n in self.filtered_notes if search_term in n['content'].lower()]
+        # Always filter from the full category list so backspacing works,
+        # and keep filtered_notes in sync so clicking opens the right note.
+        base = getattr(self, '_category_notes', None) or self.notes
+        matching_notes = [n for n in base if search_term in n['content'].lower()]
 
         self.notes_listbox.delete(0, tk.END)
 
         for note in matching_notes:
-            preview = note['content'][:50].replace('\n', ' ')
-            self.notes_listbox.insert(tk.END, preview)
+            self.notes_listbox.insert(tk.END, self._note_preview(note))
+
+        self.filtered_notes = matching_notes
 
     # Note operations
     def save_note_changes(self):
@@ -482,7 +529,11 @@ class StickyNoteGUI(tk.Tk):
                 success = editor.update_note(self.selected_note['id'], new_content)
 
                 if success:
-                    messagebox.showinfo("Success", "Note updated successfully")
+                    messagebox.showinfo(
+                        "Saved",
+                        "Your note was updated.\n\n"
+                        "If the Sticky Notes app is open, close and reopen "
+                        "it to see the change.")
                     self.load_notes()
                 else:
                     messagebox.showerror("Error", "Failed to update note")
@@ -496,7 +547,13 @@ class StickyNoteGUI(tk.Tk):
             messagebox.showwarning("Warning", "No note selected")
             return
 
-        confirm = messagebox.askyesno("Confirm", "Are you sure you want to delete this note?")
+        confirm = messagebox.askyesno(
+            "Delete this note?",
+            "The note will be moved to the Sticky Notes recycle area "
+            "(not permanently erased).\n\n"
+            "A safety backup of all your notes is made automatically "
+            "before any change.\n\n"
+            "Tip: close the Microsoft Sticky Notes app first if it's open.")
 
         if confirm:
             try:
@@ -649,52 +706,94 @@ class StickyNoteGUI(tk.Tk):
             return
 
         try:
-            backup_mgr = BackupManager()
+            backup_mgr = BackupManager(str(BACKUP_DIR))
             backup_file = backup_mgr.create_backup(self.db_path, compress=True)
 
-            messagebox.showinfo("Success", f"Backup created:\n{backup_file}")
+            messagebox.showinfo(
+                "Backup created",
+                f"Your notes are safely backed up:\n\n{backup_file}")
             self.refresh_backups()
 
         except Exception as e:
             messagebox.showerror("Error", f"Backup failed: {e}")
 
     def restore_backup(self):
-        """Restore from selected backup"""
+        """Restore the database from the selected backup"""
         selection = self.backup_listbox.curselection()
 
-        if not selection:
-            messagebox.showwarning("Warning", "No backup selected")
+        if not selection or selection[0] >= len(self._backups):
+            messagebox.showwarning("Warning", "Select a backup from the list first")
             return
 
-        confirm = messagebox.askyesno("Confirm", "Restore from this backup?\nCurrent database will be backed up first.")
+        if not self.db_path:
+            messagebox.showwarning("Warning", "No notes database connected")
+            return
 
-        if confirm:
-            # Implementation would go here
-            messagebox.showinfo("Info", "Restore functionality - implementation in progress")
+        backup = self._backups[selection[0]]
+        confirm = messagebox.askyesno(
+            "Restore this backup?",
+            f"Your notes will be put back the way they were on "
+            f"{backup['created'].strftime('%B %d, %Y at %H:%M')}.\n\n"
+            "A safety copy of your current notes is made first, so "
+            "nothing is lost.\n\n"
+            "Important: close the Microsoft Sticky Notes app before "
+            "continuing.\n\nRestore now?")
+
+        if not confirm:
+            return
+
+        try:
+            # Release our handle so the database file can be replaced
+            self.db.close()
+
+            backup_mgr = BackupManager(str(BACKUP_DIR))
+            backup_mgr.restore_backup(backup['path'], self.db_path,
+                                      create_backup_first=True)
+
+            # Reconnect and reload
+            self.db.connect(self.db_path)
+            self.load_notes()
+            self.refresh_backups()
+            messagebox.showinfo("Restored", "Your notes were restored successfully.")
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Restore failed: {e}")
+            self.db.connect(self.db_path)
 
     def delete_backup(self):
-        """Delete selected backup"""
+        """Delete the selected backup file"""
         selection = self.backup_listbox.curselection()
 
-        if not selection:
-            messagebox.showwarning("Warning", "No backup selected")
+        if not selection or selection[0] >= len(self._backups):
+            messagebox.showwarning("Warning", "Select a backup from the list first")
             return
 
-        confirm = messagebox.askyesno("Confirm", "Delete this backup?")
+        backup = self._backups[selection[0]]
+        confirm = messagebox.askyesno(
+            "Delete this backup?",
+            f"Delete the backup from "
+            f"{backup['created'].strftime('%B %d, %Y at %H:%M')}?\n\n"
+            "This only removes the backup file - your current notes "
+            "are not affected.")
 
-        if confirm:
-            # Implementation would go here
-            messagebox.showinfo("Info", "Delete functionality - implementation in progress")
+        if not confirm:
+            return
+
+        try:
+            BackupManager(str(BACKUP_DIR)).delete_backup(backup['path'])
+            self.refresh_backups()
+        except Exception as e:
+            messagebox.showerror("Error", f"Could not delete backup: {e}")
 
     def refresh_backups(self):
         """Refresh backup list"""
         self.backup_listbox.delete(0, tk.END)
 
         try:
-            backup_mgr = BackupManager()
-            backups = backup_mgr.list_backups()
+            backup_mgr = BackupManager(str(BACKUP_DIR))
+            self._backups = backup_mgr.list_backups()
 
-            for backup in backups:
+            for backup in self._backups:
                 size_str = BackupManager.format_size(backup['size'])
                 date_str = backup['created'].strftime('%Y-%m-%d %H:%M')
                 self.backup_listbox.insert(tk.END, f"{backup['name']} - {date_str} ({size_str})")
@@ -758,16 +857,29 @@ class StickyNoteGUI(tk.Tk):
             formats = ['csv']
 
         try:
-            export_mgr = ExportManager("exports")
+            EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+            export_mgr = ExportManager(str(EXPORT_DIR))
             results = export_mgr.export(notes, formats, filename)
 
-            success_msg = "Export successful:\n"
+            ok = {fmt: path for fmt, path in results.items()
+                  if "Error" not in path}
+            failed = {fmt: path for fmt, path in results.items()
+                      if "Error" in path}
 
-            for fmt, path in results.items():
-                if "Error" not in path:
-                    success_msg += f"\n{fmt}: {path}"
+            if failed:
+                messagebox.showerror(
+                    "Export problem",
+                    "Some files could not be created:\n\n" +
+                    "\n".join(f"{fmt}: {err}" for fmt, err in failed.items()))
 
-            messagebox.showinfo("Success", success_msg)
+            if ok:
+                open_now = messagebox.askyesno(
+                    "Export finished",
+                    f"Saved {len(ok)} file(s) to your Documents folder:\n\n"
+                    f"{EXPORT_DIR}\n\n"
+                    "Open the folder now?")
+                if open_now:
+                    os.startfile(str(EXPORT_DIR))
 
         except Exception as e:
             messagebox.showerror("Error", f"Export failed: {e}")
@@ -794,7 +906,7 @@ class StickyNoteGUI(tk.Tk):
 
     def show_about(self):
         """Show about dialog"""
-        about_text = """Sticky Note Organizer v1.0.0
+        about_text = f"""Sticky Note Organizer v{__version__}
 
 A powerful tool to extract, organize, and analyze
 Microsoft Sticky Notes.
