@@ -25,8 +25,8 @@ def run_command(command, description):
 def check_python_version():
     """Check if Python version is supported"""
     version = sys.version_info
-    if version.major < 3 or (version.major == 3 and version.minor < 7):
-        print(f"❌ Python 3.7+ is required. You have Python {version.major}.{version.minor}")
+    if version.major < 3 or (version.major == 3 and version.minor < 8):
+        print(f"❌ Python 3.8+ is required. You have Python {version.major}.{version.minor}")
         return False
     
     print(f"✅ Python {version.major}.{version.minor}.{version.micro} is supported")
@@ -41,7 +41,6 @@ def install_dependencies():
     core_deps = [
         "click>=8.0.0",
         "colorama>=0.4.0",
-        "pathlib2>=2.3.0",
         "python-dateutil>=2.8.0"
     ]
     

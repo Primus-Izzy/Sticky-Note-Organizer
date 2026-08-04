@@ -1,37 +1,66 @@
 """
-Note editing, merging, and management functionality
+Note editing, merging, and management functionality.
+
+All write operations target the live Sticky Notes database, so this module
+is deliberately conservative:
+
+- Timestamps are written as .NET DateTime ticks (integers), matching what
+  the Sticky Notes app stores — never ISO strings.
+- Deletes are soft by default (DeletedAt is set), like the app itself.
+- An automatic safety backup of the database is created before the first
+  write operation of each session.
+- Close the Microsoft Sticky Notes app before editing; it keeps the
+  database open and may overwrite or lock changes.
 """
 
+import logging
+import re
 import sqlite3
-from typing import List, Dict, Any, Optional, Tuple
-from datetime import datetime
+import uuid
+from pathlib import Path
+from typing import List, Dict, Any, Optional
+
+from .timestamps import now_ticks
+
+logger = logging.getLogger(__name__)
+
+# Text stored by modern Sticky Notes can contain "\id=<guid>" markers that
+# the app uses internally. We preserve them when rewriting note content.
+_ID_MARKER_RE = re.compile(r'\\id=[\w\-_]+\s*')
+
+# Sync-related columns that must not be copied into new rows, otherwise the
+# app's cloud sync can conflict or silently drop the note.
+_SYNC_COLUMNS = {'RemoteId', 'ChangeKey', 'LastServerVersion'}
 
 
 class NoteEditor:
     """Edit, merge, and manage sticky notes in the database"""
 
-    def __init__(self, db_path: str):
+    def __init__(self, db_path: str, auto_backup: bool = True,
+                 backup_dir: Optional[str] = None):
         """
-        Initialize note editor
+        Initialize note editor.
 
         Args:
             db_path: Path to the sticky notes database
+            auto_backup: Create a safety backup before the first write
+            backup_dir: Where to store safety backups
+                        (default: ~/.sticky_note_organizer/auto_backups)
         """
         self.db_path = db_path
         self.connection = None
+        self.auto_backup = auto_backup
+        self.backup_dir = backup_dir or str(
+            Path.home() / '.sticky_note_organizer' / 'auto_backups')
+        self._backup_done = False
 
     def connect(self) -> bool:
-        """
-        Connect to the database
-
-        Returns:
-            True if connection successful
-        """
+        """Connect to the database. Returns True on success."""
         try:
-            self.connection = sqlite3.connect(self.db_path)
+            self.connection = sqlite3.connect(self.db_path, timeout=5.0)
             return True
         except sqlite3.Error as e:
-            print(f"Error connecting to database: {e}")
+            logger.error("Error connecting to database: %s", e)
             return False
 
     def close(self):
@@ -40,35 +69,57 @@ class NoteEditor:
             self.connection.close()
             self.connection = None
 
-    def update_note(self, note_id: str, new_content: str) -> bool:
-        """
-        Update the content of a note
-
-        Args:
-            note_id: ID of the note to update
-            new_content: New content for the note
-
-        Returns:
-            True if update was successful
-
-        Raises:
-            sqlite3.Error: If database operation fails
-        """
+    def _require_connection(self):
         if not self.connection:
             raise RuntimeError("Not connected to database")
 
+    def _ensure_backup(self):
+        """Create a one-time safety backup before the first write operation."""
+        if self._backup_done or not self.auto_backup:
+            return
+        try:
+            from .backup import BackupManager
+            backup_mgr = BackupManager(self.backup_dir)
+            backup_file = backup_mgr.auto_backup(self.db_path, keep_last_n=10)
+            logger.info("Safety backup created: %s", backup_file)
+        except Exception as e:
+            # A failed backup should not corrupt-proof us into never editing,
+            # but the user must know about it.
+            logger.warning("Could not create safety backup: %s", e)
+        self._backup_done = True
+
+    @staticmethod
+    def _preserve_id_markers(old_text: Optional[str], new_content: str) -> str:
+        """Carry the app's internal \\id= markers over to rewritten content."""
+        if not old_text:
+            return new_content
+        markers = _ID_MARKER_RE.findall(old_text)
+        if not markers:
+            return new_content
+        if _ID_MARKER_RE.search(new_content):
+            return new_content
+        return ''.join(m if m.endswith(' ') else m + ' ' for m in markers) + new_content
+
+    def update_note(self, note_id: str, new_content: str) -> bool:
+        """
+        Update the content of a note.
+
+        Returns True if a note was updated.
+        """
+        self._require_connection()
+        self._ensure_backup()
+
         try:
             cursor = self.connection.cursor()
+            cursor.execute("SELECT Text FROM Note WHERE Id = ?", (note_id,))
+            row = cursor.fetchone()
+            if row is None:
+                return False
 
-            # Update the note content and modified date
-            # Note: The actual column names might vary, adjust as needed
-            cursor.execute("""
-                UPDATE Note
-                SET Text = ?,
-                    UpdatedAt = ?
-                WHERE Id = ?
-            """, (new_content, datetime.now().isoformat(), note_id))
-
+            content = self._preserve_id_markers(row[0], new_content)
+            cursor.execute(
+                "UPDATE Note SET Text = ?, UpdatedAt = ? WHERE Id = ?",
+                (content, now_ticks(), note_id))
             self.connection.commit()
             return cursor.rowcount > 0
 
@@ -78,35 +129,20 @@ class NoteEditor:
 
     def delete_note(self, note_id: str, permanent: bool = False) -> bool:
         """
-        Delete a note from the database
-
-        Args:
-            note_id: ID of the note to delete
-            permanent: If True, permanently delete; if False, mark as deleted
-
-        Returns:
-            True if deletion was successful
-
-        Raises:
-            sqlite3.Error: If database operation fails
+        Delete a note. Soft delete (sets DeletedAt) by default, matching the
+        Sticky Notes app's own behavior; pass permanent=True to remove the row.
         """
-        if not self.connection:
-            raise RuntimeError("Not connected to database")
+        self._require_connection()
+        self._ensure_backup()
 
         try:
             cursor = self.connection.cursor()
-
             if permanent:
-                # Permanently delete the note
                 cursor.execute("DELETE FROM Note WHERE Id = ?", (note_id,))
             else:
-                # Mark as deleted (soft delete)
-                cursor.execute("""
-                    UPDATE Note
-                    SET DeletedAt = ?
-                    WHERE Id = ?
-                """, (datetime.now().isoformat(), note_id))
-
+                cursor.execute(
+                    "UPDATE Note SET DeletedAt = ?, UpdatedAt = ? WHERE Id = ?",
+                    (now_ticks(), now_ticks(), note_id))
             self.connection.commit()
             return cursor.rowcount > 0
 
@@ -115,82 +151,53 @@ class NoteEditor:
             raise sqlite3.Error(f"Failed to delete note: {e}")
 
     def merge_notes(self, note_ids: List[str], separator: str = "\n\n---\n\n",
-                   keep_first: bool = True) -> Optional[str]:
+                    keep_first: bool = True) -> Optional[str]:
         """
-        Merge multiple notes into a single note
+        Merge multiple notes into a single note.
 
-        Args:
-            note_ids: List of note IDs to merge
-            separator: String to use between merged contents
-            keep_first: If True, keep first note and delete others;
-                       if False, create new note
+        The surviving note receives the combined content; the other notes are
+        soft-deleted (recoverable), not removed.
 
-        Returns:
-            ID of the merged note, or None if merge failed
-
-        Raises:
-            sqlite3.Error: If database operation fails
+        Returns the ID of the merged note, or None if no notes were found.
         """
-        if not self.connection:
-            raise RuntimeError("Not connected to database")
+        self._require_connection()
 
         if len(note_ids) < 2:
             raise ValueError("Need at least 2 notes to merge")
 
+        self._ensure_backup()
+
         try:
             cursor = self.connection.cursor()
-
-            # Fetch all notes to merge
             placeholders = ','.join('?' * len(note_ids))
             cursor.execute(f"""
-                SELECT Id, Text, CreatedAt, Theme, WindowPosition
-                FROM Note
+                SELECT Id, Text FROM Note
                 WHERE Id IN ({placeholders})
                 ORDER BY CreatedAt
             """, note_ids)
-
             notes = cursor.fetchall()
 
             if not notes:
                 return None
 
-            # Combine content
-            merged_content = separator.join(note[1] for note in notes if note[1])
+            merged_content = separator.join(n[1] for n in notes if n[1])
+            ticks = now_ticks()
 
             if keep_first:
-                # Update the first note with merged content
                 merged_id = notes[0][0]
-                cursor.execute("""
-                    UPDATE Note
-                    SET Text = ?,
-                        UpdatedAt = ?
-                    WHERE Id = ?
-                """, (merged_content, datetime.now().isoformat(), merged_id))
-
-                # Delete the other notes
-                for note in notes[1:]:
-                    cursor.execute("DELETE FROM Note WHERE Id = ?", (note[0],))
-
+                cursor.execute(
+                    "UPDATE Note SET Text = ?, UpdatedAt = ? WHERE Id = ?",
+                    (merged_content, ticks, merged_id))
+                others = [n[0] for n in notes[1:]]
             else:
-                # Create a new note with merged content
-                import uuid
-                merged_id = str(uuid.uuid4())
+                merged_id = self._copy_row(cursor, notes[0][0],
+                                           text=merged_content)
+                others = [n[0] for n in notes]
 
-                cursor.execute("""
-                    INSERT INTO Note (Id, Text, Theme, CreatedAt, UpdatedAt, WindowPosition)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                """, (
-                    merged_id,
-                    merged_content,
-                    notes[0][3],  # Use theme from first note
-                    datetime.now().isoformat(),
-                    datetime.now().isoformat(),
-                    notes[0][4]   # Use position from first note
-                ))
-
-                # Delete original notes
-                for note in notes:
-                    cursor.execute("DELETE FROM Note WHERE Id = ?", (note[0],))
+            for other_id in others:
+                cursor.execute(
+                    "UPDATE Note SET DeletedAt = ?, UpdatedAt = ? WHERE Id = ?",
+                    (ticks, ticks, other_id))
 
             self.connection.commit()
             return merged_id
@@ -199,30 +206,53 @@ class NoteEditor:
             self.connection.rollback()
             raise sqlite3.Error(f"Failed to merge notes: {e}")
 
+    def _copy_row(self, cursor, source_id: str,
+                  text: Optional[str] = None) -> str:
+        """
+        Insert a full copy of an existing note row with a new Id and fresh
+        timestamps. Copies every column so NOT NULL/schema expectations of
+        the real database are met; clears sync columns.
+        """
+        cursor.execute("SELECT * FROM Note WHERE Id = ?", (source_id,))
+        row = cursor.fetchone()
+        if row is None:
+            raise sqlite3.Error(f"Source note not found: {source_id}")
+
+        columns = [d[0] for d in cursor.description]
+        values = dict(zip(columns, row))
+
+        new_id = str(uuid.uuid4())
+        ticks = now_ticks()
+        values['Id'] = new_id
+        if text is not None and 'Text' in values:
+            values['Text'] = text
+        for col in ('CreatedAt', 'UpdatedAt'):
+            if col in values:
+                values[col] = ticks
+        if 'DeletedAt' in values:
+            values['DeletedAt'] = None
+        for col in _SYNC_COLUMNS:
+            if col in values:
+                values[col] = None
+
+        col_list = ', '.join(f'"{c}"' for c in columns)
+        placeholders = ', '.join('?' * len(columns))
+        cursor.execute(
+            f'INSERT INTO Note ({col_list}) VALUES ({placeholders})',
+            [values[c] for c in columns])
+        return new_id
+
     def bulk_update_category(self, note_ids: List[str], category: str) -> int:
         """
-        Update category for multiple notes
-        Note: This adds a custom field - may need schema modification
+        Store a category for multiple notes in a separate metadata table
+        (the Sticky Notes schema has no category column; we never alter it).
 
-        Args:
-            note_ids: List of note IDs to update
-            category: New category to assign
-
-        Returns:
-            Number of notes updated
+        Returns the number of notes updated.
         """
-        if not self.connection:
-            raise RuntimeError("Not connected to database")
+        self._require_connection()
 
-        # Note: The sticky notes database might not have a category field
-        # This is a placeholder for future enhancement
-        # You might need to use a separate table to store categories
-
-        # For now, we could add it to a custom metadata table
         try:
             cursor = self.connection.cursor()
-
-            # Create metadata table if it doesn't exist
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS NoteMetadata (
                     NoteId TEXT PRIMARY KEY,
@@ -232,7 +262,6 @@ class NoteEditor:
                 )
             """)
 
-            # Update or insert category for each note
             updated = 0
             for note_id in note_ids:
                 cursor.execute("""
@@ -249,17 +278,8 @@ class NoteEditor:
             raise sqlite3.Error(f"Failed to update categories: {e}")
 
     def get_note_by_id(self, note_id: str) -> Optional[Dict[str, Any]]:
-        """
-        Retrieve a note by its ID
-
-        Args:
-            note_id: ID of the note to retrieve
-
-        Returns:
-            Dictionary with note data, or None if not found
-        """
-        if not self.connection:
-            raise RuntimeError("Not connected to database")
+        """Retrieve a note by its ID, or None if not found."""
+        self._require_connection()
 
         try:
             cursor = self.connection.cursor()
@@ -268,7 +288,6 @@ class NoteEditor:
                 FROM Note
                 WHERE Id = ?
             """, (note_id,))
-
             row = cursor.fetchone()
 
             if row:
@@ -280,7 +299,6 @@ class NoteEditor:
                     'updated_date': row[4],
                     'deleted_date': row[5]
                 }
-
             return None
 
         except sqlite3.Error as e:
@@ -288,108 +306,65 @@ class NoteEditor:
 
     def duplicate_note(self, note_id: str) -> Optional[str]:
         """
-        Create a duplicate of a note
+        Create a duplicate of a note.
 
-        Args:
-            note_id: ID of the note to duplicate
-
-        Returns:
-            ID of the new duplicated note, or None if failed
+        Returns the ID of the new note, or None if the source was not found.
         """
-        if not self.connection:
-            raise RuntimeError("Not connected to database")
+        self._require_connection()
+        self._ensure_backup()
 
         try:
             cursor = self.connection.cursor()
-
-            # Get original note
-            cursor.execute("""
-                SELECT Text, Theme, WindowPosition
-                FROM Note
-                WHERE Id = ?
-            """, (note_id,))
-
-            row = cursor.fetchone()
-
-            if not row:
-                return None
-
-            # Create new note with same content
-            import uuid
-            new_id = str(uuid.uuid4())
-
-            cursor.execute("""
-                INSERT INTO Note (Id, Text, Theme, CreatedAt, UpdatedAt, WindowPosition)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (
-                new_id,
-                row[0] + "\n\n[Copy]",  # Add indicator that this is a copy
-                row[1],
-                datetime.now().isoformat(),
-                datetime.now().isoformat(),
-                row[2]
-            ))
-
+            new_id = self._copy_row(cursor, note_id)
             self.connection.commit()
             return new_id
 
         except sqlite3.Error as e:
             self.connection.rollback()
+            if "Source note not found" in str(e):
+                return None
             raise sqlite3.Error(f"Failed to duplicate note: {e}")
 
     def search_and_replace(self, search_text: str, replace_text: str,
-                          case_sensitive: bool = False,
-                          note_ids: Optional[List[str]] = None) -> int:
+                           case_sensitive: bool = False,
+                           note_ids: Optional[List[str]] = None) -> int:
         """
-        Search and replace text across notes
+        Search and replace text across notes.
 
-        Args:
-            search_text: Text to search for
-            replace_text: Text to replace with
-            case_sensitive: Whether search should be case-sensitive
-            note_ids: Optional list of specific note IDs to search in
-
-        Returns:
-            Number of notes modified
+        Returns the number of notes modified.
         """
-        if not self.connection:
-            raise RuntimeError("Not connected to database")
+        self._require_connection()
+        self._ensure_backup()
 
         try:
             cursor = self.connection.cursor()
 
-            # Build query based on parameters
             if note_ids:
                 placeholders = ','.join('?' * len(note_ids))
-                query = f"SELECT Id, Text FROM Note WHERE Id IN ({placeholders})"
-                cursor.execute(query, note_ids)
+                cursor.execute(
+                    f"SELECT Id, Text FROM Note WHERE Id IN ({placeholders})",
+                    note_ids)
             else:
                 cursor.execute("SELECT Id, Text FROM Note")
 
             notes = cursor.fetchall()
             modified_count = 0
+            ticks = now_ticks()
 
             for note_id, text in notes:
                 if not text:
                     continue
 
-                # Perform replacement
                 if case_sensitive:
                     new_text = text.replace(search_text, replace_text)
                 else:
-                    # Case-insensitive replacement
-                    import re
                     pattern = re.compile(re.escape(search_text), re.IGNORECASE)
                     new_text = pattern.sub(replace_text, text)
 
-                # Update if changed
                 if new_text != text:
-                    cursor.execute("""
-                        UPDATE Note
-                        SET Text = ?,
-                            UpdatedAt = ?
-                        WHERE Id = ?
-                    """, (new_text, datetime.now().isoformat(), note_id))
+                    cursor.execute(
+                        "UPDATE Note SET Text = ?, UpdatedAt = ? WHERE Id = ?",
+                        (new_text, ticks, note_id))
                     modified_count += 1
 
             self.connection.commit()

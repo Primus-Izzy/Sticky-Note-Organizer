@@ -14,6 +14,7 @@ try:
 except ImportError:
     COLORS_AVAILABLE = False
 
+from . import __version__
 from .database import StickyNotesDatabase
 from .categorizer import NoteCategorizer
 from .exporters import ExportManager
@@ -87,7 +88,7 @@ def print_stats(categorized_notes, total_notes):
 
 
 @click.group()
-@click.version_option(version="1.1.1")
+@click.version_option(version=__version__)
 def cli():
     """
     Sticky Note Organizer

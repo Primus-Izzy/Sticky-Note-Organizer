@@ -2,14 +2,16 @@
 Database detection and handling for Microsoft Sticky Notes
 """
 
+import logging
 import os
 import sqlite3
 import platform
-import struct
 import re
-from pathlib import Path
 from typing import List, Optional, Dict, Any
-from datetime import datetime
+
+from .timestamps import format_timestamp
+
+logger = logging.getLogger(__name__)
 
 
 class ClassicStickyNotesParser:
@@ -122,7 +124,7 @@ class ClassicStickyNotesParser:
                         note_id += 1
 
         except Exception as e:
-            print(f"Error parsing .snt file: {e}")
+            logger.error("Error parsing .snt file: %s", e)
             # Return a helpful message
             notes.append({
                 'id': 'error_1',
@@ -184,7 +186,7 @@ class StickyNotesDatabase:
         # Find the first existing database
         for path in possible_paths:
             if os.path.exists(path) and os.path.getsize(path) > 0:
-                print(f"Found database: {path}")
+                logger.info("Found database: %s", path)
                 return path
                 
         return None
@@ -206,7 +208,7 @@ class StickyNotesDatabase:
             if os.path.exists(self.db_path):
                 return True
             else:
-                print(f"File not found: {self.db_path}")
+                logger.error("File not found: %s", self.db_path)
                 return False
         else:
             # For SQLite databases
@@ -214,7 +216,7 @@ class StickyNotesDatabase:
                 self.connection = sqlite3.connect(self.db_path)
                 return True
             except sqlite3.Error as e:
-                print(f"Error connecting to database: {e}")
+                logger.error("Error connecting to database: %s", e)
                 return False
     
     def get_table_info(self) -> Dict[str, List[str]]:
@@ -237,7 +239,7 @@ class StickyNotesDatabase:
                 tables[table] = columns
                 
         except sqlite3.Error as e:
-            print(f"Error getting table info: {e}")
+            logger.error("Error getting table info: %s", e)
             
         return tables
     
@@ -245,7 +247,7 @@ class StickyNotesDatabase:
         """Extract all notes from the database"""
         # Check if it's a classic .snt file
         if self.db_path and self.db_path.endswith('.snt'):
-            print(f"Parsing classic Sticky Notes file: {self.db_path}")
+            logger.info("Parsing classic Sticky Notes file: %s", self.db_path)
             return ClassicStickyNotesParser.extract_notes_from_snt(self.db_path)
 
         # For SQLite databases
@@ -271,31 +273,14 @@ class StickyNotesDatabase:
                 
                 for row in cursor.fetchall():
                     note_id, text, created_at, updated_at, theme, note_type = row
-                    
+
                     if text:
                         # Clean the text by removing ID prefixes
-                        import re
                         clean_text = re.sub(r'\\id=[\w\-_]+\s*', '', text).strip()
-                        
-                        # Convert Windows file time to readable date
-                        try:
-                            if created_at:
-                                unix_timestamp = (created_at - 116444736000000000) / 10000000
-                                created_date = datetime.fromtimestamp(unix_timestamp).strftime('%Y-%m-%d %H:%M:%S')
-                            else:
-                                created_date = 'Unknown'
-                        except:
-                            created_date = str(created_at) if created_at else 'Unknown'
-                            
-                        try:
-                            if updated_at:
-                                unix_timestamp = (updated_at - 116444736000000000) / 10000000
-                                updated_date = datetime.fromtimestamp(unix_timestamp).strftime('%Y-%m-%d %H:%M:%S')
-                            else:
-                                updated_date = created_date
-                        except:
-                            updated_date = str(updated_at) if updated_at else created_date
-                        
+
+                        created_date = format_timestamp(created_at)
+                        updated_date = format_timestamp(updated_at, default=created_date)
+
                         notes.append({
                             'id': note_id or 'Unknown',
                             'content': clean_text,
@@ -308,7 +293,7 @@ class StickyNotesDatabase:
             # Note: Classic .snt format is handled separately above
                         
         except sqlite3.Error as e:
-            print(f"Error extracting notes: {e}")
+            logger.error("Error extracting notes: %s", e)
             
         return notes
     

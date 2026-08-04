@@ -9,11 +9,12 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional
 from datetime import datetime
 
-try:
-    import pandas as pd
-    PANDAS_AVAILABLE = True
-except ImportError:
-    PANDAS_AVAILABLE = False
+from importlib import util as _importlib_util
+
+# Check availability without importing: pandas import is expensive (seconds)
+# and must not slow down every CLI command that never touches Excel export.
+PANDAS_AVAILABLE = (_importlib_util.find_spec("pandas") is not None
+                    and _importlib_util.find_spec("openpyxl") is not None)
 
 
 class BaseExporter:
@@ -73,13 +74,17 @@ class ExcelExporter(BaseExporter):
     def export(self, notes: List[Dict[str, Any]], filename: str = "sticky_notes") -> str:
         """Export to Excel file"""
         if not PANDAS_AVAILABLE:
-            raise ImportError("pandas and openpyxl are required for Excel export")
-        
+            raise ImportError(
+                "pandas and openpyxl are required for Excel export. "
+                "Install with: pip install \"sticky-note-organizer[excel]\"")
+
+        import pandas as pd
+
         filepath = self.output_dir / f"{filename}.xlsx"
-        
+
         if not notes:
             return str(filepath)
-        
+
         df = pd.DataFrame(notes)
         
         with pd.ExcelWriter(filepath, engine='openpyxl') as writer:

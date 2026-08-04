@@ -501,7 +501,7 @@ class StickyNoteGUI(tk.Tk):
         if confirm:
             try:
                 with NoteEditor(self.db_path) as editor:
-                    success = editor.delete_note(self.selected_note['id'], permanent=True)
+                    success = editor.delete_note(self.selected_note['id'])
 
                     if success:
                         messagebox.showinfo("Success", "Note deleted")

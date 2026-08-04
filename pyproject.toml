@@ -1,0 +1,62 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sticky-note-organizer"
+version = "1.2.0"
+description = "Extract, organize, and analyze Microsoft Sticky Notes (modern and classic formats) with CLI and GUI"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Primus-Izzy" }]
+requires-python = ">=3.8"
+keywords = ["sticky-notes", "windows", "notes", "organizer", "backup", "export"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Utilities",
+]
+dependencies = [
+    "click>=8.0.0",
+    "colorama>=0.4.0",
+    "tabulate>=0.8.0",
+    "python-dateutil>=2.8.0",
+]
+
+[project.optional-dependencies]
+excel = ["pandas>=1.3.0", "openpyxl>=3.0.0"]
+gui = ["matplotlib>=3.5.0", "Pillow>=9.0.0", "wordcloud>=1.8.0"]
+all = [
+    "pandas>=1.3.0",
+    "openpyxl>=3.0.0",
+    "matplotlib>=3.5.0",
+    "Pillow>=9.0.0",
+    "wordcloud>=1.8.0",
+]
+dev = ["pytest>=7.0", "build", "twine"]
+
+[project.urls]
+Homepage = "https://github.com/Primus-Izzy/Sticky-Note-Organizer"
+Issues = "https://github.com/Primus-Izzy/Sticky-Note-Organizer/issues"
+Changelog = "https://github.com/Primus-Izzy/Sticky-Note-Organizer/blob/main/CHANGELOG.md"
+
+[project.scripts]
+sticky-organizer = "sticky_organizer.cli:main"
+
+[project.gui-scripts]
+sticky-organizer-gui = "sticky_organizer.gui_launcher:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -5,6 +5,53 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-08-04
+
+### Fixed
+
+#### Critical: timestamp handling (data integrity)
+- **Date conversion now works on real Sticky Notes databases.** Modern
+  `plum.sqlite` stores timestamps as .NET DateTime ticks (epoch 0001-01-01),
+  but previous versions converted them as Windows FILETIME (epoch 1601). The
+  conversion overflowed and silently fell back to raw tick numbers, so dates,
+  date filters, sorting, and timeline analytics never worked on modern
+  databases. A new `timestamps` module autodetects .NET ticks, FILETIME, and
+  Unix seconds/milliseconds.
+- **Editing no longer corrupts the database.** `update_note`, `delete_note`,
+  `merge_notes`, and `duplicate_note` previously wrote ISO text strings into
+  the integer `CreatedAt`/`UpdatedAt`/`DeletedAt` columns. They now write
+  proper tick integers that the Sticky Notes app can read.
+- **Duplicating and merging notes copies the full database row** (all 19
+  columns) instead of inserting a 6-column row, and clears cloud-sync fields
+  (`RemoteId`, `ChangeKey`, `LastServerVersion`) so sync does not conflict.
+- **Editing preserves the app's internal `\id=` markers** in note text
+  instead of dropping them.
+- CLI startup no longer imports pandas eagerly (multi-second delay on some
+  systems); Excel support is detected without importing it.
+
+### Changed
+- **Deletes are soft by default** (set `DeletedAt`, recoverable) in both CLI
+  and GUI, matching the Sticky Notes app. Permanent deletion requires
+  `permanent=True`.
+- **Merging soft-deletes the source notes** instead of permanently removing
+  them.
+- **Automatic safety backup** is created in
+  `~/.sticky_note_organizer/auto_backups` (last 10 kept) before the first
+  write operation of each editing session.
+- Modern packaging: `pyproject.toml` replaces `setup.py`; heavy dependencies
+  are now optional extras (`[excel]` for pandas/openpyxl, `[gui]` for
+  matplotlib/Pillow/wordcloud, `[all]` for both). Dropped the obsolete
+  `pathlib2` dependency. Minimum Python is now 3.8.
+- Library modules use `logging` instead of `print`.
+- `--version` now reports the real package version (was hardcoded).
+
+### Added
+- GitHub Actions CI (tests on Windows and Ubuntu, Python 3.9-3.13; build +
+  `twine check`) and a PyPI Trusted Publishing release workflow.
+- Test suite for database extraction, timestamp conversion, and all editor
+  operations against a synthetic database using the real plum.sqlite schema
+  (45 tests total, up from 25).
+
 ## [1.1.1] - 2024-12-19
 
 ### Added

@@ -7,7 +7,7 @@
 [![Python](https://img.shields.io/pypi/pyversions/sticky-note-organizer)](https://pypi.org/project/sticky-note-organizer/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows-blue.svg)](https://github.com/Primus-Izzy/Sticky-Note-Organizer)
-[![Tests](https://img.shields.io/badge/tests-passing-brightgreen.svg)](https://github.com/Primus-Izzy/Sticky-Note-Organizer/actions)
+[![CI](https://github.com/Primus-Izzy/Sticky-Note-Organizer/actions/workflows/ci.yml/badge.svg)](https://github.com/Primus-Izzy/Sticky-Note-Organizer/actions/workflows/ci.yml)
 
 **A powerful Windows application to extract, organize, and analyze Microsoft Sticky Notes with both CLI and GUI interfaces.**
 
@@ -86,10 +86,14 @@ See [WINDOWS_EXECUTABLE_GUIDE.md](WINDOWS_EXECUTABLE_GUIDE.md) for details.
 **Option 2: Install from PyPI (Recommended for Python Users)** ⭐
 
 ```bash
+# Core install (CLI + extraction, CSV/JSON/Markdown export)
 pip install sticky-note-organizer
+
+# With everything (Excel export + GUI charts)
+pip install "sticky-note-organizer[all]"
 ```
 
-That's it! The package and all dependencies will be installed automatically.
+Optional extras: `[excel]` adds pandas/openpyxl for Excel export, `[gui]` adds matplotlib/Pillow/wordcloud for GUI charts, `[all]` adds both.
 
 **Option 3: Install from Source**
 
@@ -254,6 +258,8 @@ sticky-organizer restore backups/sticky_notes_backup_20231215.zip
 sticky-organizer restore backup.zip --no-backup
 ```
 
+> ⚠️ **Editing safety:** `edit`, `merge`, delete, and duplicate write to the live Sticky Notes database. **Close the Microsoft Sticky Notes app first** — it keeps the database open and can overwrite or lock your changes. A safety backup is created automatically in `~/.sticky_note_organizer/auto_backups` before the first write of each session. Deletes are soft (recoverable) by default.
+
 #### `edit` - Edit a note
 
 ```bash
@@ -393,27 +399,28 @@ The tool automatically searches these locations:
 
 ## 📋 Requirements
 
-### Core Dependencies
+Python 3.8+ is required.
+
+### Core Dependencies (always installed)
 
 ```
 click>=8.0.0              # CLI framework
-pandas>=1.3.0             # DataFrames (optional, for Excel)
-openpyxl>=3.0.0           # Excel writer (optional)
 colorama>=0.4.0           # Colored console output
 tabulate>=0.8.0           # Table formatting
-pathlib2>=2.3.0           # Path handling
 python-dateutil>=2.8.0    # Date utilities
 ```
 
-### GUI Dependencies
+### Optional Dependencies
 
 ```
-matplotlib>=3.5.0         # Charts and visualizations
-Pillow>=9.0.0            # Image handling
-wordcloud>=1.8.0         # Word cloud generation
+pandas>=1.3.0             # Excel export        (extra: excel)
+openpyxl>=3.0.0           # Excel export        (extra: excel)
+matplotlib>=3.5.0         # GUI charts          (extra: gui)
+Pillow>=9.0.0             # GUI image handling  (extra: gui)
+wordcloud>=1.8.0          # GUI word clouds     (extra: gui)
 ```
 
-All dependencies are automatically installed via `install.py` or `requirements.txt`.
+Install extras with `pip install "sticky-note-organizer[all]"` (or `[excel]` / `[gui]`).
 
 ## 🛠️ Development
 
