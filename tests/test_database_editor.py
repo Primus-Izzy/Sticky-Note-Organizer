@@ -234,3 +234,88 @@ class TestBackupRestore:
         assert original.exists()
         assert target.exists()
         assert target.read_bytes() == original.read_bytes()
+
+
+class TestCreateAndImport:
+    def test_create_note(self, plum_db):
+        with NoteEditor(plum_db, auto_backup=False) as editor:
+            new_id = editor.create_note("Imported note content")
+
+        con = sqlite3.connect(plum_db)
+        row = con.execute(
+            "SELECT Text, Theme, Type, CreatedAt, DeletedAt FROM Note WHERE Id=?",
+            (new_id,)).fetchone()
+        con.close()
+        text, theme, ntype, created, deleted = row
+        assert text == "Imported note content"
+        assert theme == 'Yellow' and ntype == 'Note'
+        assert isinstance(created, int) and created > 5 * 10**17
+        assert deleted is None
+
+    def test_create_note_rejects_empty(self, plum_db):
+        with NoteEditor(plum_db, auto_backup=False) as editor:
+            with pytest.raises(ValueError):
+                editor.create_note("   ")
+
+    def test_created_note_visible_in_extraction(self, plum_db):
+        with NoteEditor(plum_db, auto_backup=False) as editor:
+            new_id = editor.create_note("Fresh imported note")
+        db = StickyNotesDatabase()
+        db.connect(plum_db)
+        notes = db.extract_notes()
+        db.close()
+        assert any(n['id'] == new_id for n in notes)
+
+    def test_backup_manager_creates_nested_dirs(self, plum_db, tmp_path):
+        """Regression: mkdir without parents=True crashed on fresh machines"""
+        from sticky_organizer.backup import BackupManager
+        nested = tmp_path / 'a' / 'b' / 'backups'
+        mgr = BackupManager(str(nested))
+        backup = mgr.create_backup(plum_db)
+        assert Path(backup).exists()
+
+
+class TestImporter:
+    def test_parse_txt_with_separators(self, tmp_path):
+        from sticky_organizer.importer import parse_import_file
+        f = tmp_path / 'notes.txt'
+        f.write_text("First note\nwith two lines\n---\nSecond note\n----\nThird",
+                     encoding='utf-8')
+        notes = parse_import_file(str(f))
+        assert notes == ["First note\nwith two lines", "Second note", "Third"]
+
+    def test_parse_txt_single_note(self, tmp_path):
+        from sticky_organizer.importer import parse_import_file
+        f = tmp_path / 'one.txt'
+        f.write_text("Just one note here", encoding='utf-8')
+        assert parse_import_file(str(f)) == ["Just one note here"]
+
+    def test_parse_csv_content_column(self, tmp_path):
+        from sticky_organizer.importer import parse_import_file
+        f = tmp_path / 'notes.csv'
+        f.write_text("id,content,category\n1,Buy milk,Shopping\n2,Call mum,Tasks\n",
+                     encoding='utf-8')
+        assert parse_import_file(str(f)) == ["Buy milk", "Call mum"]
+
+    def test_parse_json_export_format(self, tmp_path):
+        from sticky_organizer.importer import parse_import_file
+        import json
+        f = tmp_path / 'notes.json'
+        f.write_text(json.dumps(
+            {"notes": [{"content": "note A"}, {"content": "note B"}]}),
+            encoding='utf-8')
+        assert parse_import_file(str(f)) == ["note A", "note B"]
+
+    def test_parse_json_plain_list(self, tmp_path):
+        from sticky_organizer.importer import parse_import_file
+        import json
+        f = tmp_path / 'list.json'
+        f.write_text(json.dumps(["alpha", "beta"]), encoding='utf-8')
+        assert parse_import_file(str(f)) == ["alpha", "beta"]
+
+    def test_unsupported_extension(self, tmp_path):
+        from sticky_organizer.importer import parse_import_file
+        f = tmp_path / 'notes.xyz'
+        f.write_text("x", encoding='utf-8')
+        with pytest.raises(ValueError):
+            parse_import_file(str(f))

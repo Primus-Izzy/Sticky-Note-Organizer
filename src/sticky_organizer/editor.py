@@ -242,6 +242,34 @@ class NoteEditor:
             [values[c] for c in columns])
         return new_id
 
+    def create_note(self, content: str, theme: str = 'Yellow') -> str:
+        """
+        Create a brand-new note in the database.
+
+        Returns the ID of the created note.
+        """
+        if not content or not content.strip():
+            raise ValueError("Note content cannot be empty")
+
+        self._require_connection()
+        self._ensure_backup()
+
+        try:
+            cursor = self.connection.cursor()
+            new_id = str(uuid.uuid4())
+            ticks = now_ticks()
+            cursor.execute("""
+                INSERT INTO Note (Id, Text, Theme, Type, IsOpen,
+                                  IsAlwaysOnTop, IsFutureNote, CreatedAt, UpdatedAt)
+                VALUES (?, ?, ?, 'Note', 0, 0, 0, ?, ?)
+            """, (new_id, content, theme, ticks, ticks))
+            self.connection.commit()
+            return new_id
+
+        except sqlite3.Error as e:
+            self.connection.rollback()
+            raise sqlite3.Error(f"Failed to create note: {e}")
+
     def bulk_update_category(self, note_ids: List[str], category: str) -> int:
         """
         Store a category for multiple notes in a separate metadata table

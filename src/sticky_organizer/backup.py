@@ -22,7 +22,7 @@ class BackupManager:
             backup_dir: Directory to store backups
         """
         self.backup_dir = Path(backup_dir)
-        self.backup_dir.mkdir(exist_ok=True)
+        self.backup_dir.mkdir(parents=True, exist_ok=True)
 
     def create_backup(self, db_path: str, compress: bool = True,
                      custom_name: Optional[str] = None) -> str:

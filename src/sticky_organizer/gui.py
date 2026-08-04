@@ -19,6 +19,8 @@ except ImportError:
     MATPLOTLIB_AVAILABLE = False
 
 from . import __version__
+from . import config as app_config
+from .importer import parse_import_file
 from .database import StickyNotesDatabase
 from .categorizer import NoteCategorizer
 from .exporters import ExportManager
@@ -67,10 +69,25 @@ class StickyNoteGUI(tk.Tk):
         self.categorizer = NoteCategorizer()
         self.analytics = AdvancedAnalytics()
 
+        # Restore the user's saved custom categories
+        self.custom_categories = app_config.load_custom_categories()
+        for name, keywords in self.custom_categories.items():
+            self.categorizer.add_custom_category(name, keywords)
+
         # Setup UI
         self.create_widgets()
         self.auto_connect_database()
         self.refresh_backups()
+        self.notebook.bind('<<NotebookTabChanged>>', self.on_tab_changed)
+
+    def on_tab_changed(self, event):
+        """Auto-fill the Statistics tab the moment it is opened."""
+        try:
+            tab_text = self.notebook.tab(self.notebook.select(), 'text')
+        except tk.TclError:
+            return
+        if tab_text == 'Statistics' and self.notes:
+            self.generate_statistics()
 
     def create_widgets(self):
         """Create all GUI widgets"""
@@ -106,6 +123,7 @@ class StickyNoteGUI(tk.Tk):
         file_menu.add_command(label="Open Database...", command=self.open_database)
         file_menu.add_command(label="Create Backup", command=self.create_backup_cmd)
         file_menu.add_separator()
+        file_menu.add_command(label="Import Notes...", command=self.import_notes)
         file_menu.add_command(label="Export All...", command=self.export_all)
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=self.quit)
@@ -207,6 +225,7 @@ class StickyNoteGUI(tk.Tk):
         ttk.Button(export_frame, text="JSON", command=lambda: self.export('json')).pack(side=tk.LEFT, padx=2, pady=2)
         ttk.Button(export_frame, text="Excel", command=lambda: self.export('excel')).pack(side=tk.LEFT, padx=2, pady=2)
         ttk.Button(export_frame, text="Markdown", command=lambda: self.export('markdown')).pack(side=tk.LEFT, padx=2, pady=2)
+        ttk.Button(export_frame, text="Import Notes...", command=self.import_notes).pack(side=tk.RIGHT, padx=8, pady=2)
 
     def create_filter_tab(self):
         """Create advanced filtering tab"""
@@ -294,8 +313,8 @@ class StickyNoteGUI(tk.Tk):
             self.stats_canvas = FigureCanvasTkAgg(self.stats_figure, charts_frame)
             self.stats_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
-        # Generate button
-        ttk.Button(stats_tab, text="Generate Statistics", command=self.generate_statistics).pack(pady=5)
+        # Refresh button (stats also fill in automatically when the tab opens)
+        ttk.Button(stats_tab, text="Refresh Statistics", command=self.generate_statistics).pack(pady=5)
 
     def create_backup_tab(self):
         """Create backup/restore tab"""
@@ -335,13 +354,32 @@ class StickyNoteGUI(tk.Tk):
         settings_tab = ttk.Frame(self.notebook)
         self.notebook.add(settings_tab, text="Settings")
 
-        # Custom categories
-        cat_frame = ttk.LabelFrame(settings_tab, text="Custom Categories")
-        cat_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        # Left: all categories and their keywords
+        list_frame = ttk.LabelFrame(settings_tab, text="How your notes are organized")
+        list_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
 
-        ttk.Label(cat_frame, text="Add custom categories and keywords for auto-categorization").pack(pady=5)
+        ttk.Label(list_frame,
+                  text="Notes are sorted into these categories by the words "
+                       "they contain.\nSelect one to see its keywords.",
+                  justify=tk.LEFT).pack(anchor=tk.W, padx=5, pady=5)
 
-        # Category name
+        self.settings_cat_listbox = tk.Listbox(list_frame, exportselection=False)
+        self.settings_cat_listbox.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        self.settings_cat_listbox.bind('<<ListboxSelect>>', self.on_settings_category_select)
+
+        self.settings_kw_text = tk.Text(list_frame, height=5, wrap=tk.WORD,
+                                        state=tk.DISABLED)
+        self.settings_kw_text.pack(fill=tk.X, padx=5, pady=5)
+
+        # Right: add / remove custom categories
+        cat_frame = ttk.LabelFrame(settings_tab, text="Add your own category")
+        cat_frame.pack(side=tk.RIGHT, fill=tk.BOTH, padx=5, pady=5)
+
+        ttk.Label(cat_frame,
+                  text="Example - Name: Recipes\nKeywords: recipe, cooking, "
+                       "ingredients, bake",
+                  justify=tk.LEFT).pack(anchor=tk.W, padx=5, pady=5)
+
         name_frame = ttk.Frame(cat_frame)
         name_frame.pack(fill=tk.X, padx=5, pady=2)
 
@@ -349,15 +387,70 @@ class StickyNoteGUI(tk.Tk):
         self.custom_cat_name = tk.StringVar()
         ttk.Entry(name_frame, textvariable=self.custom_cat_name).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
 
-        # Keywords
         kw_frame = ttk.Frame(cat_frame)
         kw_frame.pack(fill=tk.X, padx=5, pady=2)
 
         ttk.Label(kw_frame, text="Keywords:").pack(side=tk.LEFT, padx=2)
         self.custom_cat_keywords = tk.StringVar()
         ttk.Entry(kw_frame, textvariable=self.custom_cat_keywords).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+        ttk.Label(cat_frame, text="(separate keywords with commas)",
+                  foreground='gray').pack(anchor=tk.W, padx=5)
 
         ttk.Button(cat_frame, text="Add Category", command=self.add_custom_category).pack(pady=5)
+        ttk.Button(cat_frame, text="Remove Selected Custom Category",
+                   command=self.remove_custom_category).pack(pady=5)
+        ttk.Label(cat_frame,
+                  text="Your custom categories are saved and\n"
+                       "applied every time you open the app.",
+                  justify=tk.LEFT, foreground='gray').pack(padx=5, pady=10)
+
+        self.refresh_settings_categories()
+
+    def refresh_settings_categories(self):
+        """Fill the settings category list (custom ones marked with a star)"""
+        self.settings_cat_listbox.delete(0, tk.END)
+        for name in self.categorizer.get_categories():
+            marker = " ★" if name in self.custom_categories else ""
+            self.settings_cat_listbox.insert(tk.END, f"{name}{marker}")
+
+    def on_settings_category_select(self, event):
+        """Show keywords for the selected category"""
+        selection = self.settings_cat_listbox.curselection()
+        if not selection:
+            return
+        name = self.settings_cat_listbox.get(selection[0]).replace(" ★", "")
+        keywords = self.categorizer.get_categories().get(name, [])
+
+        self.settings_kw_text.config(state=tk.NORMAL)
+        self.settings_kw_text.delete('1.0', tk.END)
+        self.settings_kw_text.insert('1.0', ", ".join(keywords))
+        self.settings_kw_text.config(state=tk.DISABLED)
+
+    def remove_custom_category(self):
+        """Remove a user-added category"""
+        selection = self.settings_cat_listbox.curselection()
+        if not selection:
+            messagebox.showwarning("Warning", "Select a category in the list first")
+            return
+
+        name = self.settings_cat_listbox.get(selection[0]).replace(" ★", "")
+        if name not in self.custom_categories:
+            messagebox.showinfo(
+                "Built-in category",
+                "Only categories you added yourself (marked with ★) "
+                "can be removed.")
+            return
+
+        del self.custom_categories[name]
+        self.categorizer.categories.pop(name, None)
+        app_config.save_custom_categories(self.custom_categories)
+
+        self.refresh_settings_categories()
+        if self.notes:
+            self.categorized_notes = self.categorizer.categorize_notes(self.notes)
+            self.update_category_list()
+            self.update_filter_categories()
+        messagebox.showinfo("Removed", f"Category '{name}' was removed.")
 
     def create_status_bar(self):
         """Create status bar"""
@@ -833,11 +926,25 @@ class StickyNoteGUI(tk.Tk):
             messagebox.showwarning("Warning", "Please enter both name and keywords")
             return
 
-        keywords = [k.strip() for k in keywords_str.split(',')]
+        keywords = [k.strip() for k in keywords_str.split(',') if k.strip()]
 
         self.categorizer.add_custom_category(name, keywords)
+        self.custom_categories[name] = keywords
+        app_config.save_custom_categories(self.custom_categories)
 
-        messagebox.showinfo("Success", f"Added category: {name}")
+        # Apply immediately so the user sees the effect
+        self.refresh_settings_categories()
+        if self.notes:
+            self.categorized_notes = self.categorizer.categorize_notes(self.notes)
+            self.update_category_list()
+            self.update_filter_categories()
+            count = len(self.categorized_notes.get(name, []))
+            messagebox.showinfo(
+                "Category added",
+                f"'{name}' was added and saved.\n\n"
+                f"{count} of your notes match it right now.")
+        else:
+            messagebox.showinfo("Category added", f"'{name}' was added and saved.")
 
         # Clear inputs
         self.custom_cat_name.set("")
@@ -889,6 +996,64 @@ class StickyNoteGUI(tk.Tk):
 
         except Exception as e:
             messagebox.showerror("Error", f"Export failed: {e}")
+
+    def import_notes(self):
+        """Import notes from a text, CSV, or JSON file into Sticky Notes"""
+        if not self.db_path:
+            messagebox.showwarning("Warning", "No notes database connected")
+            return
+
+        filename = filedialog.askopenfilename(
+            title="Choose a file with notes to import",
+            filetypes=[("Notes files", "*.txt *.csv *.json *.md"),
+                       ("Text", "*.txt *.md"), ("CSV", "*.csv"),
+                       ("JSON", "*.json"), ("All Files", "*.*")])
+        if not filename:
+            return
+
+        try:
+            contents = parse_import_file(filename)
+        except Exception as e:
+            messagebox.showerror(
+                "Could not read file",
+                f"{e}\n\nTip: in a .txt file, put a line with just --- "
+                "between notes to import them as separate notes.")
+            return
+
+        if not contents:
+            messagebox.showinfo("Nothing to import",
+                                "No notes were found in that file.")
+            return
+
+        preview = "\n".join(
+            f"• {c[:60].splitlines()[0]}{'...' if len(c) > 60 else ''}"
+            for c in contents[:5])
+        more = f"\n...and {len(contents) - 5} more" if len(contents) > 5 else ""
+        confirm = messagebox.askyesno(
+            f"Import {len(contents)} note(s)?",
+            f"These will be added to your Sticky Notes:\n\n{preview}{more}\n\n"
+            "A safety backup is made first. Close the Microsoft Sticky "
+            "Notes app before importing.\n\nImport now?")
+        if not confirm:
+            return
+
+        try:
+            imported = 0
+            with NoteEditor(self.db_path) as editor:
+                for content in contents:
+                    editor.create_note(content)
+                    imported += 1
+
+            self.load_notes()
+            messagebox.showinfo(
+                "Import finished",
+                f"Added {imported} note(s).\n\n"
+                "If the Sticky Notes app is open, close and reopen it "
+                "to see them.")
+
+        except Exception as e:
+            messagebox.showerror("Import failed", f"{e}")
+            self.load_notes()
 
     def find_duplicates(self):
         """Find duplicate notes"""

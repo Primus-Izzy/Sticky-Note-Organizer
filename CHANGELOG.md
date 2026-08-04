@@ -66,6 +66,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **One-click launch**: new `sticky-organizer-shortcuts` command creates
   Desktop and Start Menu shortcuts with a proper app icon (also run
   automatically by `install.py`); the GUI window now has an icon too.
+- **Import notes**: File > Import Notes... adds notes to Sticky Notes from
+  .txt (use a `---` line between notes), .csv (content column), or .json
+  (this tool's export format) - with preview, confirmation, and automatic
+  safety backup. New `NoteEditor.create_note()` API.
+- **Statistics fill in automatically** when the tab is opened (the button
+  is now just a refresh).
+- **Settings tab rebuilt**: browse every category and its keywords, add
+  custom categories that are saved to `~/.sticky_note_organizer/settings.json`
+  and re-applied on every launch (previously lost on restart), remove
+  custom categories, and see immediately how many notes match.
+- **Fixed: creating a backup crashed on fresh machines** (backup folder
+  was created without parent directories).
 
 ### Fixed (GUI)
 - Clicking a search result opened the wrong note (selection indexed into
