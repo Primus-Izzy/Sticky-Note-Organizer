@@ -43,6 +43,12 @@ class StickyNoteGUI(tk.Tk):
         self.title(f"Sticky Note Organizer {__version__}")
         self.geometry("1200x700")
 
+        # App icon (best-effort; plain default icon if unavailable)
+        try:
+            self.iconbitmap(str(Path(__file__).parent / 'assets' / 'icon.ico'))
+        except tk.TclError:
+            pass
+
         # Readable defaults for non-technical users
         self.option_add('*Font', ('Segoe UI', 10))
         style = ttk.Style(self)

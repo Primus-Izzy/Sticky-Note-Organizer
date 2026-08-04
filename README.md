@@ -115,15 +115,25 @@ Optional extras: `[excel]` adds pandas/openpyxl for Excel export, `[gui]` adds m
 
 ### 🎮 Launch the GUI (Super Easy!)
 
-**For Non-Technical Users (Easiest Method):**
+**One-click launch (recommended):**
 
-Simply **double-click one of these files** in the project folder:
+After installing, run this once:
 
-1. **`StickyNoteOrganizer.pyw`** ⭐ **Recommended** (runs without console window)
+```bash
+sticky-organizer-shortcuts
+```
+
+This puts a **Sticky Note Organizer** icon on your Desktop and in your
+Start Menu — from then on, just click it like any other app. (If you
+installed from source with `python install.py`, the shortcuts are created
+for you automatically.)
+
+**Or double-click a file** in the project folder:
+
+1. **`StickyNoteOrganizer.pyw`** (runs without console window)
 2. **`launch_gui.bat`** (shows console window for debugging)
-3. **`launch_gui.py`** (if you have Python set to open .py files)
 
-That's it! The GUI will open automatically and detect your sticky notes.
+The GUI opens and finds your sticky notes automatically.
 
 **For Command Line Users:**
 

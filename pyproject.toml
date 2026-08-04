@@ -51,12 +51,16 @@ Changelog = "https://github.com/Primus-Izzy/Sticky-Note-Organizer/blob/main/CHAN
 
 [project.scripts]
 sticky-organizer = "sticky_organizer.cli:main"
+sticky-organizer-shortcuts = "sticky_organizer.shortcuts:main"
 
 [project.gui-scripts]
 sticky-organizer-gui = "sticky_organizer.gui_launcher:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+sticky_organizer = ["assets/*.ico"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

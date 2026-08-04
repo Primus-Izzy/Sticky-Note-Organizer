@@ -63,6 +63,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   fonts.
 - **Backup Restore and Delete buttons now actually work** (they were
   unimplemented stubs showing "implementation in progress").
+- **One-click launch**: new `sticky-organizer-shortcuts` command creates
+  Desktop and Start Menu shortcuts with a proper app icon (also run
+  automatically by `install.py`); the GUI window now has an icon too.
 
 ### Fixed (GUI)
 - Clicking a search result opened the wrong note (selection indexed into

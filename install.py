@@ -71,7 +71,12 @@ def setup_development_environment():
     # Install package in development mode
     if not run_command("pip install -e .", "Installing Sticky Note Organizer in development mode"):
         return False
-    
+
+    # One-click launch: Desktop + Start Menu shortcuts (Windows only)
+    if sys.platform == 'win32':
+        run_command(f'"{sys.executable}" -m sticky_organizer.shortcuts',
+                    "Creating Desktop and Start Menu shortcuts")
+
     return True
 
 
